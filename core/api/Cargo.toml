@@ -23,3 +23,4 @@ actix-web = "2.0"
 serde_json = "1.0"
 lazy_static = "1.4"
 num_cpus = "1.12"
+common-merkle = { path = "../../common/merkle" }

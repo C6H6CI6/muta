@@ -14,6 +14,7 @@ use std::sync::Arc;
 use common_crypto::{
     HashValue, PrivateKey, PublicKey, Secp256k1PrivateKey, Signature, ToPublicKey,
 };
+use common_merkle::Merkle;
 use protocol::fixed_codec::FixedCodec;
 use protocol::traits::{APIAdapter, Context};
 
@@ -82,6 +83,37 @@ impl Query {
             .await?;
 
         Ok(Receipt::from(receipt))
+    }
+
+    #[graphql(
+        name = "getReceiptProof",
+        description = "Get the proof by receipt hash"
+    )]
+    async fn get_transaction_proof(state_ctx: &State, tx_hash: Hash) -> FieldResult<Vec<Hash>> {
+        let hash = protocol::types::Hash::from_hex(&tx_hash.as_hex())?;
+
+        let ctx = Context::new();
+
+        let receipt = state_ctx
+            .adapter
+            .get_receipt_by_tx_hash(ctx.clone(), hash.clone())
+            .await?;
+
+        let block = state_ctx
+            .adapter
+            .get_block_by_height(ctx, Some(receipt.height))
+            .await?;
+
+        let index = match block.ordered_tx_hashes.iter().position(|r| r == &hash) {
+            Some(index) => index,
+            None => return Ok(vec![]),
+        };
+
+        let merkle = Merkle::from_hashes(block.ordered_tx_hashes.clone());
+        match merkle.get_proof_by_input_index(index) {
+            Some(proof) => Ok(proof.into_iter().map(|p| Hash::from(p.hash)).collect()),
+            None => Ok(vec![]),
+        }
     }
 
     #[graphql(name = "queryService", description = "query service")]
