@@ -17,10 +17,10 @@ payload = '''
 name = "mulimuli"
 payload = '''
 {
-  [
+  "assets": [
     {
       "address": "0xf8389d774afdad8755ef8e629e5a154fddc6325a",
-      "balance": 200
+      "balance": 999999999
     }
   ]
 }
