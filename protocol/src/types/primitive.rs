@@ -24,23 +24,26 @@ const HASH_LEN: usize = 32;
 
 // Should started with 0x
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Hex(String);
+pub struct Hex(Bytes);
 
 impl Hex {
     pub fn from_string(s: String) -> ProtocolResult<Self> {
-        if s.starts_with("0x") {
-            Ok(Self(s))
-        } else {
-            Err(TypesError::HexPrefix.into())
-        }
+        let s = clean_0x(&s)?;
+        let hex_bytes = hex::decode(s).map_err(|e| TypesError::FromHex { error: e })?;
+
+        Ok(Self(Bytes::from(hex_bytes)))
     }
 
     pub fn as_string(&self) -> String {
-        self.0.to_owned()
+        format!("0x{:?}", hex::encode(&self.0))
     }
 
     pub fn as_string_trim0x(&self) -> String {
-        (&self.0[2..]).to_owned()
+        hex::encode(&self.0)
+    }
+
+    pub fn as_bytes(&self) -> Bytes {
+        self.0.clone()
     }
 }
 
@@ -49,7 +52,7 @@ impl Serialize for Hex {
     where
         S: serde::ser::Serializer,
     {
-        serializer.serialize_str(&self.0)
+        serializer.serialize_str(&self.as_string())
     }
 }
 

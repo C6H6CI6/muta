@@ -1,9 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-use protocol::fixed_codec::{FixedCodec, FixedCodecError};
-use protocol::types::{Address, Hash};
+use bytes::Bytes;
+use molecule::prelude::Entity;
 
-pub struct UpdateCKBBlockPayload {}
+use protocol::fixed_codec::{FixedCodec, FixedCodecError};
+use protocol::types::{Address, Hash, Hex};
+use protocol::ProtocolResult;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct GenesisPayload {
@@ -47,16 +49,24 @@ pub struct CreateCommentResponse {
     pub id: Hash,
 }
 
-// impl rlp::Decodable for GetBalanceResponse {
-//     fn decode(rlp: &rlp::Rlp) -> Result<Self, rlp::DecoderError> {
-//         Ok(Self {
-//             id: rlp.at(0)?.as_val()?,
-//         })
-//     }
-// }
-//
-// impl rlp::Encodable for GetBalanceResponse {
-//     fn rlp_append(&self, s: &mut rlp::RlpStream) {
-//         s.begin_list(1).append(&self.balance);
-//     }
-// }
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct UpdateCKBPayload {
+    pub headers: Vec<ckb_jsonrpc_types::Header>,
+}
+
+pub struct CKBHeader {
+    pub inner: ckb_types::packed::Header,
+}
+
+impl FixedCodec for CKBHeader {
+    fn encode_fixed(&self) -> ProtocolResult<bytes::Bytes> {
+        Ok(self.inner.as_bytes())
+    }
+
+    fn decode_fixed(bytes: bytes::Bytes) -> ProtocolResult<Self> {
+        let s = Self {
+            inner: ckb_types::packed::Header::from_slice(&bytes).unwrap(),
+        };
+        Ok(s)
+    }
+}

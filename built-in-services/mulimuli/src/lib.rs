@@ -6,15 +6,17 @@ mod types;
 use byteorder::{ByteOrder, LittleEndian};
 use bytes::{Bytes, BytesMut};
 use derive_more::{Display, From};
+use molecule::prelude::Entity;
+use serde::{Deserialize, Serialize};
 
 use binding_macro::{cycles, genesis, hook_after, read, service, write};
-use protocol::traits::{ExecutorParams, ServiceSDK, StoreMap};
-use protocol::types::{Address, Hash, Metadata, ServiceContext, METADATA_KEY};
+use protocol::traits::{ExecutorParams, ServiceSDK, StoreArray, StoreMap};
+use protocol::types::{Address, Hash, Hex, Metadata, ServiceContext, METADATA_KEY};
 use protocol::{ProtocolError, ProtocolErrorKind, ProtocolResult};
 
 use crate::types::{
-    CreateCommentResponse, CreatePostResponse, DeleteCommentPayload, DeletePostPayload,
-    GenesisPayload, GetBalanceResponse, StarPayload, UpdateCKBBlockPayload,
+    CKBHeader, CreateCommentResponse, CreatePostResponse, DeleteCommentPayload, DeletePostPayload,
+    GenesisPayload, GetBalanceResponse, StarPayload, UpdateCKBPayload,
 };
 
 pub struct MulimuliService<SDK> {
@@ -23,7 +25,9 @@ pub struct MulimuliService<SDK> {
     posts:    Box<dyn StoreMap<Hash, Address>>,
     comments: Box<dyn StoreMap<Hash, Address>>,
 
-    star_map: Box<dyn StoreMap<Hash, u64>>,
+    star_map:        Box<dyn StoreMap<Hash, u64>>,
+    ckb_headers_map: Box<dyn StoreMap<Bytes, CKBHeader>>,
+    ckb_headers_vec: Box<dyn StoreArray<CKBHeader>>,
 }
 
 #[service]
@@ -33,6 +37,10 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
         let posts: Box<dyn StoreMap<Hash, Address>> = sdk.alloc_or_recover_map("posts")?;
         let comments: Box<dyn StoreMap<Hash, Address>> = sdk.alloc_or_recover_map("comments")?;
         let star_map: Box<dyn StoreMap<Hash, u64>> = sdk.alloc_or_recover_map("star_map")?;
+        let ckb_headers_map: Box<dyn StoreMap<Bytes, CKBHeader>> =
+            sdk.alloc_or_recover_map("ckb_headers_map")?;
+        let ckb_headers_vec: Box<dyn StoreArray<CKBHeader>> =
+            sdk.alloc_or_recover_array("ckb_headers_vec")?;
 
         Ok(Self {
             sdk,
@@ -40,6 +48,8 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
             posts,
             comments,
             star_map,
+            ckb_headers_map,
+            ckb_headers_vec,
         })
     }
 
@@ -156,17 +166,6 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
         Ok(())
     }
 
-    // fn transfer(&self, ctx: ServiceContext, balance: u64) -> ProtocolResult<()> {
-    //     let amount = self.assets.get(&ctx.get_caller())?;
-    //
-    //     let (v, overflow) = amount.overflowing_sub(balance);
-    //     if overflow {
-    //         return Err(ServiceError::U64Overflow.into());
-    //     }
-    //
-    //     self.assets.insert(ctx.get_caller().clone(), v)?;
-    // }
-
     fn gen_id(&self, ctx: ServiceContext) -> Hash {
         let caller = ctx.get_caller().as_bytes();
         let nonce = ctx.get_nonce().unwrap().as_bytes();
@@ -183,8 +182,68 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
     }
 
     // ckb
-    // #[write]
-    // fn update_ckb_block(&self, ctx: ServiceContext) -> ProtocolResult<()> {}
+    #[write]
+    fn update_ckb(&mut self, ctx: ServiceContext, payload: UpdateCKBPayload) -> ProtocolResult<()> {
+        if payload.headers.is_empty() {
+            return Ok(());
+        }
+
+        let len = self.ckb_headers_vec.len()?;
+        let mut latest_header = if len == 0 {
+            let packed_header =
+                ckb_types::packed::Header::from(payload.headers.first().unwrap().clone());
+            let block_hash = packed_header.calc_header_hash();
+            let block_hash = Bytes::from(block_hash.as_bytes());
+            self.ckb_headers_vec.push(CKBHeader {
+                inner: packed_header.clone(),
+            })?;
+            self.ckb_headers_map.insert(block_hash, CKBHeader {
+                inner: packed_header.clone(),
+            })?;
+            CKBHeader {
+                inner: packed_header,
+            }
+        } else {
+            self.ckb_headers_vec.get(len - 1)?
+        };
+
+        for header in payload.headers.into_iter() {
+            let packed_header = ckb_types::packed::Header::from(header);
+            let prev_hash = latest_header.inner.calc_header_hash();
+
+            if get_height(&latest_header.inner) + 1 != get_height(&packed_header) {
+                return Err(ServiceError::InvalidHeight {
+                    height: get_height(&packed_header),
+                }
+                .into());
+            }
+
+            if prev_hash != packed_header.raw().parent_hash() {
+                return Err(ServiceError::InvalidHeight {
+                    height: get_height(&packed_header),
+                }
+                .into());
+            }
+
+            let block_hash = packed_header.calc_header_hash();
+            let block_hash = Bytes::from(block_hash.as_bytes());
+            self.ckb_headers_vec.push(CKBHeader {
+                inner: packed_header.clone(),
+            })?;
+            self.ckb_headers_map.insert(block_hash, CKBHeader {
+                inner: packed_header.clone(),
+            })?;
+            latest_header = CKBHeader {
+                inner: packed_header,
+            };
+        }
+        Ok(())
+    }
+}
+
+fn get_height(header: &ckb_types::packed::Header) -> u64 {
+    let slice = header.raw().number();
+    LittleEndian::read_u64(slice.as_slice())
 }
 
 #[derive(Debug, Display, From)]
@@ -205,6 +264,11 @@ pub enum ServiceError {
     #[display(fmt = "Not found address, address {:?}", address)]
     NotFoundAddress {
         address: Address,
+    },
+
+    #[display(fmt = "Invalid height {:?}", height)]
+    InvalidHeight {
+        height: u64,
     },
 
     #[display(fmt = "Not found asset, expect {:?} real {:?}", expect, real)]
