@@ -23,27 +23,24 @@ pub const GENESIS_HEIGHT: u64 = 0;
 const HASH_LEN: usize = 32;
 
 // Should started with 0x
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Hex(Bytes);
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct Hex(String);
 
 impl Hex {
     pub fn from_string(s: String) -> ProtocolResult<Self> {
-        let s = clean_0x(&s)?;
-        let hex_bytes = hex::decode(s).map_err(|e| TypesError::FromHex { error: e })?;
-
-        Ok(Self(Bytes::from(hex_bytes)))
+        if s.starts_with("0x") {
+            Ok(Self(s))
+        } else {
+            Err(TypesError::HexPrefix.into())
+        }
     }
 
     pub fn as_string(&self) -> String {
-        format!("0x{:?}", hex::encode(&self.0))
+        self.0.to_owned()
     }
 
     pub fn as_string_trim0x(&self) -> String {
-        hex::encode(&self.0)
-    }
-
-    pub fn as_bytes(&self) -> Bytes {
-        self.0.clone()
+        (&self.0[2..]).to_owned()
     }
 }
 
@@ -52,7 +49,7 @@ impl Serialize for Hex {
     where
         S: serde::ser::Serializer,
     {
-        serializer.serialize_str(&self.as_string())
+        serializer.serialize_str(&self.0)
     }
 }
 
@@ -337,7 +334,7 @@ impl fmt::Debug for ValidatorExtend {
 }
 
 fn clean_0x(s: &str) -> ProtocolResult<&str> {
-    if s.starts_with("0x") || s.starts_with("0X") {
+    if s.starts_with("0x") {
         Ok(&s[2..])
     } else {
         Err(TypesError::HexPrefix.into())
