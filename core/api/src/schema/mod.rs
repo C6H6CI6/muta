@@ -48,6 +48,13 @@ pub struct Uint64(String);
 #[graphql(description = "Bytes corresponding hex string.")]
 pub struct Bytes(String);
 
+#[derive(juniper::GraphQLObject, Clone)]
+#[graphql(description = "Merkle proof")]
+pub struct MerkleProof {
+    lemmas:  Vec<Hash>,
+    indices: Vec<Uint64>,
+}
+
 impl Hash {
     pub fn as_hex(&self) -> String {
         self.0.to_uppercase()
@@ -103,6 +110,23 @@ impl From<u64> for Uint64 {
 impl From<protocol::Bytes> for Bytes {
     fn from(bytes: protocol::Bytes) -> Self {
         Bytes("0x".to_owned() + &hex::encode(bytes))
+    }
+}
+
+impl From<common_merkle::Proof> for MerkleProof {
+    fn from(proof: common_merkle::Proof) -> Self {
+        Self {
+            lemmas:  proof
+                .lemmas()
+                .iter()
+                .map(|h| Hash::from(h.clone()))
+                .collect(),
+            indices: proof
+                .indices()
+                .iter()
+                .map(|i| Uint64::from(*i as u64))
+                .collect(),
+        }
     }
 }
 

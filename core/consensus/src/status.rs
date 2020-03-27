@@ -243,8 +243,7 @@ impl ExecutedInfo {
                 .map(|r| Hash::digest(r.to_owned().encode_fixed().unwrap()))
                 .collect::<Vec<_>>(),
         )
-        .get_root_hash()
-        .unwrap_or_else(Hash::from_empty);
+        .get_root_hash();
 
         Self {
             exec_height:  height,

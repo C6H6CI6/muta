@@ -11,3 +11,4 @@ repository = "https://github.com/nervosnetwork/muta"
 protocol = { path = "../../protocol", package = "muta-protocol" }
 rayon = "1.3"
 static_merkle_tree = "1.1.0"
+merkle-cbt = { git = "https://github.com/yejiayu/merkle-tree", branch = "proor_new" }

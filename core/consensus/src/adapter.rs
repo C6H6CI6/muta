@@ -545,8 +545,7 @@ fn gen_executed_info(exec_resp: ExecutorResp, height: u64, order_root: MerkleRoo
             .map(|r| Hash::digest(r.to_owned().encode_fixed().unwrap()))
             .collect::<Vec<_>>(),
     )
-    .get_root_hash()
-    .unwrap_or_else(Hash::from_empty);
+    .get_root_hash();
 
     ExecutedInfo {
         exec_height:  height,

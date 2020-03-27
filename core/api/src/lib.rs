@@ -21,7 +21,8 @@ use protocol::traits::{APIAdapter, Context};
 use crate::config::GraphQLConfig;
 use crate::schema::{
     to_signed_transaction, to_transaction, Address, Block, Bytes, ExecResp, Hash,
-    InputRawTransaction, InputTransactionEncryption, Receipt, SignedTransaction, Uint64,
+    InputRawTransaction, InputTransactionEncryption, MerkleProof, Receipt, SignedTransaction,
+    Uint64,
 };
 
 lazy_static! {
@@ -89,7 +90,7 @@ impl Query {
         name = "getReceiptProof",
         description = "Get the proof by receipt hash"
     )]
-    async fn get_transaction_proof(state_ctx: &State, tx_hash: Hash) -> FieldResult<Vec<Hash>> {
+    async fn get_transaction_proof(state_ctx: &State, tx_hash: Hash) -> FieldResult<MerkleProof> {
         let hash = protocol::types::Hash::from_hex(&tx_hash.as_hex())?;
 
         let ctx = Context::new();
@@ -106,13 +107,13 @@ impl Query {
 
         let index = match block.ordered_tx_hashes.iter().position(|r| r == &hash) {
             Some(index) => index,
-            None => return Ok(vec![]),
+            None => return Ok(MerkleProof::from(common_merkle::Proof::new(vec![], vec![]))),
         };
 
         let merkle = Merkle::from_hashes(block.ordered_tx_hashes.clone());
-        match merkle.get_proof_by_input_index(index) {
-            Some(proof) => Ok(proof.into_iter().map(|p| Hash::from(p.hash)).collect()),
-            None => Ok(vec![]),
+        match merkle.get_proof(&[index as u32]) {
+            Some(proof) => Ok(MerkleProof::from(proof)),
+            None => Ok(MerkleProof::from(common_merkle::Proof::new(vec![], vec![]))),
         }
     }
 

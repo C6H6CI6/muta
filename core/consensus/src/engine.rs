@@ -88,7 +88,7 @@ impl<Adapter: ConsensusAdapter + 'static> Engine<FixedPill> for ConsensusEngine<
             exec_height: current_consensus_status.exec_height,
             timestamp: time_now(),
             logs_bloom: current_consensus_status.list_logs_bloom,
-            order_root: order_root.unwrap_or_else(Hash::from_empty),
+            order_root,
             confirm_root: current_consensus_status.list_confirm_root,
             state_root,
             receipt_root: current_consensus_status.list_receipt_root.clone(),
