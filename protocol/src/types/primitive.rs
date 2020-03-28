@@ -334,7 +334,7 @@ impl fmt::Debug for ValidatorExtend {
 }
 
 fn clean_0x(s: &str) -> ProtocolResult<&str> {
-    if s.starts_with("0x") {
+    if s.starts_with("0x") || s.starts_with("0X") {
         Ok(&s[2..])
     } else {
         Err(TypesError::HexPrefix.into())

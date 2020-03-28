@@ -29,11 +29,12 @@ fn test_mulimuli() {
 
     let asset = crate::types::GenesisAsset {
         address: caller.clone(),
-        balance: 100,
+        balance: 500,
     };
     service
         .init_genesis(crate::types::GenesisPayload {
             assets: vec![asset],
+            ckb_genesis: ckb_jsonrpc_types::Header::default(),
         })
         .unwrap();
     // test create_asset
@@ -50,11 +51,14 @@ fn test_mulimuli() {
     println!("res {:?}", res);
 
     service
-        .star(context, crate::types::StarPayload {
+        .star(context.clone(), crate::types::StarPayload {
             post_id: res.id,
             balance: 100,
         })
         .unwrap();
+
+    let balance = service.get_balance(context.clone()).unwrap();
+    println!("res balance {:?}", balance);
 }
 
 fn new_mulimuli_service() -> MulimuliService<

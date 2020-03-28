@@ -5,7 +5,7 @@ privkey = "0x45c56be699dca666191ad3446897e0f480da234da896270202514a0e1a587c3f"
 data_path = "./devtools/chain/data"
 
 [graphql]
-listening_address = "0.0.0.0:8000"
+listening_address = "0.0.0.0:4321"
 graphql_uri = "/graphql"
 graphiql_uri = "/graphiql"
 workers = 0 # if 0, uses number of available logical cpu as threads count.
@@ -13,7 +13,7 @@ maxconn = 25000
 max_payload_size = 1048576
 
 [network]
-listening_address = "0.0.0.0:1337"
+listening_address = "0.0.0.0:5555"
 rpc_timeout = 10
 
 [consensus]

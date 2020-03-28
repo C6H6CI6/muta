@@ -16,7 +16,7 @@ use protocol::{ProtocolError, ProtocolErrorKind, ProtocolResult};
 
 use crate::types::{
     CKBHeader, CreateCommentResponse, CreatePostResponse, DeleteCommentPayload, DeletePostPayload,
-    GenesisPayload, GetBalanceResponse, StarPayload, UpdateCKBPayload,
+    GenesisPayload, GetBalanceResponse, StarPayload, UpdateCKBPayload, LatestCKBStatus, CreateAssetPayload,CKBTransferOutputData
 };
 
 pub struct MulimuliService<SDK> {
@@ -25,7 +25,6 @@ pub struct MulimuliService<SDK> {
     posts:    Box<dyn StoreMap<Hash, Address>>,
     comments: Box<dyn StoreMap<Hash, Address>>,
 
-    star_map:        Box<dyn StoreMap<Hash, u64>>,
     ckb_headers_map: Box<dyn StoreMap<Bytes, CKBHeader>>,
     ckb_headers_vec: Box<dyn StoreArray<CKBHeader>>,
 }
@@ -36,7 +35,6 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
         let assets: Box<dyn StoreMap<Address, u64>> = sdk.alloc_or_recover_map("assets")?;
         let posts: Box<dyn StoreMap<Hash, Address>> = sdk.alloc_or_recover_map("posts")?;
         let comments: Box<dyn StoreMap<Hash, Address>> = sdk.alloc_or_recover_map("comments")?;
-        let star_map: Box<dyn StoreMap<Hash, u64>> = sdk.alloc_or_recover_map("star_map")?;
         let ckb_headers_map: Box<dyn StoreMap<Bytes, CKBHeader>> =
             sdk.alloc_or_recover_map("ckb_headers_map")?;
         let ckb_headers_vec: Box<dyn StoreArray<CKBHeader>> =
@@ -47,7 +45,6 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
             assets,
             posts,
             comments,
-            star_map,
             ckb_headers_map,
             ckb_headers_vec,
         })
@@ -55,40 +52,31 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
 
     #[genesis]
     fn init_genesis(&mut self, payload: GenesisPayload) -> ProtocolResult<()> {
+        let packed_header =
+                ckb_types::packed::Header::from(payload.ckb_genesis);
+        let block_hash = packed_header.calc_header_hash();
+        let block_hash = Bytes::from(block_hash.as_bytes());
+        self.ckb_headers_vec.push(CKBHeader {
+            inner: packed_header.clone(),
+        })?;
+        self.ckb_headers_map.insert(block_hash, CKBHeader {
+            inner: packed_header.clone(),
+        })?;
+
         for asset in payload.assets.into_iter() {
             self.assets.insert(asset.address, asset.balance)?;
         }
         Ok(())
     }
 
-    #[hook_after]
-    fn blocl_book_after(&mut self, _params: &ExecutorParams) -> ProtocolResult<()> {
-        for (post_id, balance) in self.star_map.iter() {
-            let address = self.posts.get(&post_id)?;
-
-            let amount = self.assets.get(&address)?;
-            // let author_dividend = balance / 2;
-            // let leftover = balance - author_dividend;
-            // self.assets.insert(address, amount + author_dividend)?;
-            self.assets.insert(address, amount + balance)?;
-        }
-
-        Ok(())
-    }
-
-    #[read]
-    fn create_asset(&self, _ctx: ServiceContext) -> ProtocolResult<Metadata> {
-        let metadata: Metadata = self
-            .sdk
-            .get_value(&METADATA_KEY.to_owned())?
-            .expect("Metadata should always be in the genesis block");
-        Ok(metadata)
-    }
-
     // fe
     #[read]
     fn get_balance(&self, ctx: ServiceContext) -> ProtocolResult<GetBalanceResponse> {
         let caller = ctx.get_caller();
+        
+        if !self.assets.contains(&caller)? {
+            return Ok(GetBalanceResponse { balance: 0 });
+        }
 
         let balance = self.assets.get(&caller)?;
 
@@ -157,12 +145,14 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
 
         self.assets.insert(ctx.get_caller().clone(), v)?;
 
-        if !self.star_map.contains(&payload.post_id)? {
-            self.star_map.insert(payload.post_id.clone(), 0)?;
+        let address = self.posts.get(&payload.post_id)?;
+
+        if !self.assets.contains(&address)? {
+            self.assets.insert(address.clone(), 0)?;
         }
-        let count = self.star_map.get(&payload.post_id)?;
-        self.star_map
-            .insert(payload.post_id, count + payload.balance)?;
+
+        let balance = self.assets.get(&address)?;
+        self.assets.insert(address, balance + payload.balance)?;
         Ok(())
     }
 
@@ -181,6 +171,29 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
         Hash::digest(bm.freeze())
     }
 
+    #[read]
+    fn get_ckb_status(&self, ctx: ServiceContext) -> ProtocolResult<LatestCKBStatus> {
+        let len = self.ckb_headers_vec.len()?;
+        if len == 0 {
+            Ok(LatestCKBStatus { height: None})
+        } else {
+            let header = self.ckb_headers_vec.get(len - 1)?;
+
+            Ok(LatestCKBStatus { height: Some(get_height(&header.inner))})
+        }
+    }
+
+    #[write]
+    fn create_asset(&mut self, ctx: ServiceContext, payload: CreateAssetPayload) -> ProtocolResult<()> {
+        let ckb_tx = ckb_types::packed::Transaction::from(payload.ckb_tx);
+        let output_data = ckb_tx.raw().outputs_data();
+        let create_data: CKBTransferOutputData = serde_json::from_slice(output_data.as_slice()).map_err(ServiceError::JsonParse)?;
+
+        // Address::from_hex()
+        // self.assets
+        Ok(())
+    }
+
     // ckb
     #[write]
     fn update_ckb(&mut self, ctx: ServiceContext, payload: UpdateCKBPayload) -> ProtocolResult<()> {
@@ -189,23 +202,7 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
         }
 
         let len = self.ckb_headers_vec.len()?;
-        let mut latest_header = if len == 0 {
-            let packed_header =
-                ckb_types::packed::Header::from(payload.headers.first().unwrap().clone());
-            let block_hash = packed_header.calc_header_hash();
-            let block_hash = Bytes::from(block_hash.as_bytes());
-            self.ckb_headers_vec.push(CKBHeader {
-                inner: packed_header.clone(),
-            })?;
-            self.ckb_headers_map.insert(block_hash, CKBHeader {
-                inner: packed_header.clone(),
-            })?;
-            CKBHeader {
-                inner: packed_header,
-            }
-        } else {
-            self.ckb_headers_vec.get(len - 1)?
-        };
+        let mut latest_header = self.ckb_headers_vec.get(len - 1)?;
 
         for header in payload.headers.into_iter() {
             let packed_header = ckb_types::packed::Header::from(header);

@@ -10,6 +10,7 @@ use protocol::ProtocolResult;
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct GenesisPayload {
     pub assets: Vec<GenesisAsset>,
+    pub ckb_genesis: ckb_jsonrpc_types::Header,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -39,6 +40,7 @@ pub struct StarPayload {
     pub balance: u64,
 }
 
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct CreatePostResponse {
     pub id: Hash,
@@ -53,6 +55,12 @@ pub struct CreateCommentResponse {
 pub struct UpdateCKBPayload {
     pub headers: Vec<ckb_jsonrpc_types::Header>,
 }
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct LatestCKBStatus {
+    pub height: Option<u64>,
+}
+
 
 pub struct CKBHeader {
     pub inner: ckb_types::packed::Header,
@@ -70,3 +78,17 @@ impl FixedCodec for CKBHeader {
         Ok(s)
     }
 }
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct CreateAssetPayload {
+    pub ckb_tx: ckb_jsonrpc_types::Transaction,
+    pub merkle_path: Vec<Hex>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct CKBTransferOutputData {
+    pub id: u64,
+    pub address: Address,
+    pub amount: u64,
+}
+
