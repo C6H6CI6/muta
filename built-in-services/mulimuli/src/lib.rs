@@ -290,10 +290,6 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
         let output_data = ckb_tx.raw().outputs_data().get(0).unwrap();
         let create_data = CKBTransferOutputData::from_slice(output_data.as_slice());
 
-        if self.ckb_create_id_map.contains(&create_data.address)? {
-            return Err(ServiceError::IDExists { id: create_data.address }.into());
-        }
-
         if !self.assets.contains(&create_data.address)? {
             self.assets.insert(create_data.address.clone(), 0)?;
         }
@@ -316,13 +312,6 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
         let ckb_tx = ckb_types::packed::Transaction::from(payload.ckb_tx);
         let output_data = ckb_tx.raw().outputs_data().get(0).unwrap();
         let transfer_data = CKBTransferOutputData::from_slice(output_data.as_slice());
-
-        if self.ckb_burn_id_map.contains(&transfer_data.address)? {
-            return Err(ServiceError::IDExists {
-                id: transfer_data.address,
-            }
-            .into());
-        }
 
         let balance = self.assets.get(&transfer_data.address)?;
         self.assets.insert(
