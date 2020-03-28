@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use byteorder::{ByteOrder, LittleEndian};
 use bytes::Bytes;
 use molecule::prelude::Entity;
 
@@ -103,15 +104,38 @@ pub struct CKBCrossTxPayload {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct CKBTransferOutputData {
-    pub id:      u64,
     pub address: Address,
     pub amount:  u64,
 }
 
+impl CKBTransferOutputData {
+    pub fn from_slice(bytes: &[u8]) -> Self {
+        let amount_bytes = &bytes[1..10];
+        let address_bytes = &bytes[10..30];
+        let amount = LittleEndian::read_u64(amount_bytes);
+        let address = Address::from_bytes(Bytes::from(address_bytes.to_vec())).unwrap();
+
+        Self { amount, address }
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct CKBDepositOutputData {
-    pub id:          u64,
     pub address:     Address,
     pub bls_address: Hex,
     pub amount:      u64,
+}
+
+impl CKBDepositOutputData {
+    pub fn from_slice(bytes: &[u8]) -> Self {
+        let amount_bytes = &bytes[1..10];
+        let address_bytes = &bytes[10..30];
+        let bls_address_bytes = &bytes[30..127];
+        let amount = LittleEndian::read_u64(amount_bytes);
+        let address = Address::from_bytes(Bytes::from(address_bytes.to_vec())).unwrap();
+        let hex_str = hex::encode(bls_address_bytes);
+
+
+        Self { amount, address, bls_address: Hex::from_string("0x".to_owned() + &hex_str).unwrap() }
+    }
 }
