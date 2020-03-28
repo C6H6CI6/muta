@@ -130,7 +130,7 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
         payload: CKBCrossTxPayload,
     ) -> ProtocolResult<String> {
         let ckb_tx = ckb_types::packed::Transaction::from(payload.ckb_tx);
-        let output_data = ckb_tx.raw().outputs_data();
+        let output_data = ckb_tx.raw().outputs_data().get(0).unwrap();
         let output_data = CKBDepositOutputData::from_slice(output_data.as_slice());
 
         if !self.ckb_deposit_asset.contains(&output_data.address)? {
@@ -144,7 +144,7 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
         self.ckb_deposit_id_map
             .insert(output_data.address.clone(), CKBTx { inner: ckb_tx.clone() })?;
 
-        let json_str = self.sdk.read(&ctx, None, "metadata", "output_data", "")?;
+        let json_str = self.sdk.read(&ctx, None, "metadata", "get_metadata", "")?;
         let mut metadata: Metadata =
             serde_json::from_str(&json_str).map_err(ServiceError::JsonParse)?;
 
@@ -168,7 +168,7 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
         payload: CKBCrossTxPayload,
     ) -> ProtocolResult<String> {
         let ckb_tx = ckb_types::packed::Transaction::from(payload.ckb_tx);
-        let output_data = ckb_tx.raw().outputs_data();
+        let output_data = ckb_tx.raw().outputs_data().get(0).unwrap();
         let output_data = CKBDepositOutputData::from_slice(output_data.as_slice());
 
         if !self.ckb_deposit_asset.contains(&output_data.address)? {
@@ -182,7 +182,7 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
 
         self.ckb_deposit_id_map.remove(&output_data.address)?;
 
-        let json_str = self.sdk.read(&ctx, None, "metadata", "output_data", "")?;
+        let json_str = self.sdk.read(&ctx, None, "metadata", "get_metadata", "")?;
         let mut metadata: Metadata =
             serde_json::from_str(&json_str).map_err(ServiceError::JsonParse)?;
 
@@ -287,7 +287,7 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
         payload: CKBCrossTxPayload,
     ) -> ProtocolResult<String> {
         let ckb_tx = ckb_types::packed::Transaction::from(payload.ckb_tx);
-        let output_data = ckb_tx.raw().outputs_data();
+        let output_data = ckb_tx.raw().outputs_data().get(0).unwrap();
         let create_data = CKBTransferOutputData::from_slice(output_data.as_slice());
 
         if self.ckb_create_id_map.contains(&create_data.address)? {
@@ -314,7 +314,7 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
         payload: CKBCrossTxPayload,
     ) -> ProtocolResult<String> {
         let ckb_tx = ckb_types::packed::Transaction::from(payload.ckb_tx);
-        let output_data = ckb_tx.raw().outputs_data();
+        let output_data = ckb_tx.raw().outputs_data().get(0).unwrap();
         let transfer_data = CKBTransferOutputData::from_slice(output_data.as_slice());
 
         if self.ckb_burn_id_map.contains(&transfer_data.address)? {
