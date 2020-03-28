@@ -95,7 +95,7 @@ impl FixedCodec for CKBTx {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct CKBTransferPayload {
+pub struct CKBCrossTxPayload {
     pub ckb_tx:  ckb_jsonrpc_types::Transaction,
     pub indices: Vec<u32>,
     pub lemmas:  Vec<Hash>,
@@ -106,4 +106,12 @@ pub struct CKBTransferOutputData {
     pub id:      u64,
     pub address: Address,
     pub amount:  u64,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct CKBDepositOutputData {
+    pub id:          u64,
+    pub address:     Address,
+    pub bls_address: Hex,
+    pub amount:      u64,
 }

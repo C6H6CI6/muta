@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use binding_macro::{cycles, genesis, service};
+use binding_macro::{cycles, genesis, service, write};
 use protocol::traits::{ExecutorParams, ServiceSDK};
 use protocol::types::{Metadata, ServiceContext, METADATA_KEY};
 use protocol::ProtocolResult;
@@ -29,5 +29,11 @@ impl<SDK: ServiceSDK> MetadataService<SDK> {
             .get_value(&METADATA_KEY.to_owned())?
             .expect("Metadata should always be in the genesis block");
         Ok(metadata)
+    }
+
+    #[write]
+    fn write_metadata(&mut self, ctx: ServiceContext, metadata: Metadata) -> ProtocolResult<()> {
+        self.sdk.set_value(METADATA_KEY.to_owned(), metadata)?;
+        Ok(())
     }
 }

@@ -11,13 +11,15 @@ use serde::{Deserialize, Serialize};
 
 use binding_macro::{cycles, genesis, hook_after, read, service, write};
 use protocol::traits::{ExecutorParams, ServiceSDK, StoreArray, StoreMap};
-use protocol::types::{Address, Hash, Hex, Metadata, ServiceContext, METADATA_KEY};
+use protocol::types::{
+    Address, Hash, Hex, Metadata, ServiceContext, ValidatorExtend, METADATA_KEY,
+};
 use protocol::{ProtocolError, ProtocolErrorKind, ProtocolResult};
 
 use crate::types::{
-    CKBHeader, CKBTransferOutputData, CKBTransferPayload, CKBTx, CreateCommentResponse,
-    CreatePostResponse, DeleteCommentPayload, DeletePostPayload, GenesisPayload,
-    GetBalanceResponse, LatestCKBStatus, StarPayload, UpdateCKBPayload,
+    CKBCrossTxPayload, CKBDepositOutputData, CKBHeader, CKBTransferOutputData, CKBTx,
+    CreateCommentResponse, CreatePostResponse, DeleteCommentPayload, DeletePostPayload,
+    GenesisPayload, GetBalanceResponse, LatestCKBStatus, StarPayload, UpdateCKBPayload,
 };
 
 pub struct MulimuliService<SDK> {
@@ -26,10 +28,12 @@ pub struct MulimuliService<SDK> {
     posts:    Box<dyn StoreMap<Hash, Address>>,
     comments: Box<dyn StoreMap<Hash, Address>>,
 
-    ckb_headers_map:   Box<dyn StoreMap<Bytes, CKBHeader>>,
-    ckb_headers_vec:   Box<dyn StoreArray<CKBHeader>>,
-    ckb_create_id_map: Box<dyn StoreMap<u64, CKBTx>>,
-    ckb_burn_id_map:   Box<dyn StoreMap<u64, CKBTx>>,
+    ckb_headers_map:    Box<dyn StoreMap<Bytes, CKBHeader>>,
+    ckb_headers_vec:    Box<dyn StoreArray<CKBHeader>>,
+    ckb_create_id_map:  Box<dyn StoreMap<u64, CKBTx>>,
+    ckb_burn_id_map:    Box<dyn StoreMap<u64, CKBTx>>,
+    ckb_deposit_id_map: Box<dyn StoreMap<u64, CKBTx>>,
+    ckb_deposit_asset:  Box<dyn StoreMap<Address, u64>>,
 }
 
 #[service]
@@ -46,6 +50,10 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
             sdk.alloc_or_recover_map("ckb_create_id_map")?;
         let ckb_burn_id_map: Box<dyn StoreMap<u64, CKBTx>> =
             sdk.alloc_or_recover_map("ckb_burn_id_map")?;
+        let ckb_deposit_id_map: Box<dyn StoreMap<u64, CKBTx>> =
+            sdk.alloc_or_recover_map("ckb_deposit_id_map")?;
+        let ckb_deposit_asset: Box<dyn StoreMap<Address, u64>> =
+            sdk.alloc_or_recover_map("ckb_deposit_asset")?;
 
         Ok(Self {
             sdk,
@@ -56,6 +64,8 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
             ckb_headers_vec,
             ckb_create_id_map,
             ckb_burn_id_map,
+            ckb_deposit_id_map,
+            ckb_deposit_asset,
         })
     }
 
@@ -111,6 +121,84 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
         payload: DeletePostPayload,
     ) -> ProtocolResult<()> {
         self.posts.remove(&payload.id)
+    }
+
+    #[write]
+    fn deposit(
+        &mut self,
+        ctx: ServiceContext,
+        payload: CKBCrossTxPayload,
+    ) -> ProtocolResult<CKBDepositOutputData> {
+        let ckb_tx = ckb_types::packed::Transaction::from(payload.ckb_tx);
+        let output_data = ckb_tx.raw().outputs_data();
+        let output_data: CKBDepositOutputData =
+            serde_json::from_slice(output_data.as_slice()).map_err(ServiceError::JsonParse)?;
+
+        if !self.ckb_deposit_asset.contains(&output_data.address)? {
+            self.ckb_deposit_asset
+                .insert(output_data.address.clone(), 0)?;
+        }
+
+        self.ckb_deposit_asset
+            .insert(output_data.address.clone(), output_data.amount)?;
+
+        self.ckb_deposit_id_map
+            .insert(output_data.id, CKBTx { inner: ckb_tx })?;
+
+        let json_str = self.sdk.read(&ctx, None, "metadata", "output_data", "")?;
+        let mut metadata: Metadata =
+            serde_json::from_str(&json_str).map_err(ServiceError::JsonParse)?;
+
+        metadata.verifier_list.push(ValidatorExtend {
+            bls_pub_key:    output_data.bls_address.clone(),
+            address:        output_data.address.clone(),
+            propose_weight: 1,
+            vote_weight:    1,
+        });
+
+        let new_metadata = serde_json::to_string(&metadata).map_err(ServiceError::JsonParse)?;
+        self.sdk
+            .write(&ctx, None, "metadata", "write_metadata", &new_metadata)?;
+        Ok(output_data)
+    }
+
+    #[write]
+    fn refund(
+        &mut self,
+        ctx: ServiceContext,
+        payload: CKBCrossTxPayload,
+    ) -> ProtocolResult<CKBDepositOutputData> {
+        let ckb_tx = ckb_types::packed::Transaction::from(payload.ckb_tx);
+        let output_data = ckb_tx.raw().outputs_data();
+        let output_data: CKBDepositOutputData =
+            serde_json::from_slice(output_data.as_slice()).map_err(ServiceError::JsonParse)?;
+
+        if !self.ckb_deposit_asset.contains(&output_data.address)? {
+            return Err(ServiceError::NotFoundAddress {
+                address: output_data.address,
+            }
+            .into());
+        }
+
+        self.ckb_deposit_asset.remove(&output_data.address)?;
+
+        self.ckb_deposit_id_map.remove(&output_data.id)?;
+
+        let json_str = self.sdk.read(&ctx, None, "metadata", "output_data", "")?;
+        let mut metadata: Metadata =
+            serde_json::from_str(&json_str).map_err(ServiceError::JsonParse)?;
+
+        let list: Vec<ValidatorExtend> = metadata
+            .verifier_list
+            .into_iter()
+            .filter(|v| v.address != output_data.address)
+            .collect();
+        metadata.verifier_list = list;
+
+        let new_metadata = serde_json::to_string(&metadata).map_err(ServiceError::JsonParse)?;
+        self.sdk
+            .write(&ctx, None, "metadata", "write_metadata", &new_metadata)?;
+        Ok(output_data)
     }
 
     #[write]
@@ -197,7 +285,7 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
     fn create_asset(
         &mut self,
         ctx: ServiceContext,
-        payload: CKBTransferPayload,
+        payload: CKBCrossTxPayload,
     ) -> ProtocolResult<CKBTransferOutputData> {
         let ckb_tx = ckb_types::packed::Transaction::from(payload.ckb_tx);
         let output_data = ckb_tx.raw().outputs_data();
@@ -225,7 +313,7 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
     fn burn_asset(
         &mut self,
         ctx: ServiceContext,
-        payload: CKBTransferPayload,
+        payload: CKBCrossTxPayload,
     ) -> ProtocolResult<CKBTransferOutputData> {
         let ckb_tx = ckb_types::packed::Transaction::from(payload.ckb_tx);
         let output_data = ckb_tx.raw().outputs_data();
