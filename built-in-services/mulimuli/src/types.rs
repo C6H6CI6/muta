@@ -110,11 +110,11 @@ pub struct CKBTransferOutputData {
 
 impl CKBTransferOutputData {
     pub fn from_slice(bytes: &[u8]) -> Self {
-        let amount_bytes = &bytes[1..10];
-        let address_bytes = &bytes[10..30];
+        let bytes = &bytes[4..];
+        let amount_bytes = &bytes[1..9];
+        let address_bytes = &bytes[9..bytes.len()];
         let amount = LittleEndian::read_u64(amount_bytes);
         let address = Address::from_bytes(Bytes::from(address_bytes.to_vec())).unwrap();
-        println!("CKBTransferOutputData address {:?}", address);
 
         Self { amount, address }
     }
@@ -129,9 +129,11 @@ pub struct CKBDepositOutputData {
 
 impl CKBDepositOutputData {
     pub fn from_slice(bytes: &[u8]) -> Self {
-        let amount_bytes = &bytes[1..10];
-        let address_bytes = &bytes[10..30];
-        let bls_address_bytes = &bytes[30..bytes.len()];
+        let bytes = &bytes[4..];
+    
+        let amount_bytes = &bytes[1..9];
+        let address_bytes = &bytes[9..29];
+        let bls_address_bytes = &bytes[29..bytes.len()];
         let amount = LittleEndian::read_u64(amount_bytes);
         let address = Address::from_bytes(Bytes::from(address_bytes.to_vec())).unwrap();
         let hex_str = hex::encode(bls_address_bytes);
