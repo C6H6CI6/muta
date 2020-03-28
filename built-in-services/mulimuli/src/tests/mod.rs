@@ -23,7 +23,9 @@ use crate::MulimuliService;
 fn test_mulimuli() {
     let cycles_limit = 1024 * 1024 * 1024; // 1073741824
     let caller = Address::from_hex("0x755cdba6ae4f479f7164792b318b2a06c759833b").unwrap();
+    let caller2 = Address::from_hex("0x755cdba6ae4f479f7164792b318b2a06c7598322").unwrap();
     let context = mock_context(cycles_limit, caller.clone());
+    let context2 = mock_context(cycles_limit, caller2.clone());
 
     let mut service = new_mulimuli_service();
 
@@ -33,21 +35,21 @@ fn test_mulimuli() {
     };
     service
         .init_genesis(crate::types::GenesisPayload {
-            assets: vec![asset],
+            assets:      vec![asset],
             ckb_genesis: ckb_jsonrpc_types::Header::default(),
         })
         .unwrap();
     // test create_asset
-    let res = service.create_post(context.clone()).unwrap();
+    let res = service.create_post(context2.clone()).unwrap();
     println!("res {:?}", res);
     service
-        .delete_comment(context.clone(), crate::types::DeleteCommentPayload {
+        .delete_comment(context2.clone(), crate::types::DeleteCommentPayload {
             id: res.id,
         })
         .unwrap();
-    let res = service.create_post(context.clone()).unwrap();
+    let res = service.create_post(context2.clone()).unwrap();
     println!("res {:?}", res);
-    let res = service.create_comment(context.clone()).unwrap();
+    let res = service.create_comment(context2.clone()).unwrap();
     println!("res {:?}", res);
 
     service
@@ -57,7 +59,7 @@ fn test_mulimuli() {
         })
         .unwrap();
 
-    let balance = service.get_balance(context.clone()).unwrap();
+    let balance = service.get_balance(context2.clone()).unwrap();
     println!("res balance {:?}", balance);
 }
 
