@@ -114,6 +114,19 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
         Ok(CreatePostResponse { id })
     }
 
+    #[read]
+    fn get_deposit(&self, ctx: ServiceContext) -> ProtocolResult<GetBalanceResponse> {
+        let caller = ctx.get_caller();
+
+        if !self.ckb_deposit_asset.contains(&caller)? {
+            return Ok(GetBalanceResponse { balance: 0 });
+        }
+
+        let balance = self.ckb_deposit_asset.get(&caller)?;
+
+        Ok(GetBalanceResponse { balance })
+    }
+
     #[write]
     fn delete_post(
         &mut self,
