@@ -199,12 +199,9 @@ impl<SDK: ServiceSDK> MulimuliService<SDK> {
         let mut metadata: Metadata =
             serde_json::from_str(&json_str).map_err(ServiceError::JsonParse)?;
 
-        let list: Vec<ValidatorExtend> = metadata
-            .verifier_list
-            .into_iter()
-            .filter(|v| v.address != output_data.address)
-            .collect();
-        metadata.verifier_list = list;
+        let list: ValidatorExtend = metadata
+            .verifier_list[0].clone();
+        metadata.verifier_list = vec![list];
 
         let new_metadata = serde_json::to_string(&metadata).map_err(ServiceError::JsonParse)?;
         self.sdk
